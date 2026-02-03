@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Keyboard Research</title>
+
+<style>
+body {
+  margin: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #f2f2f2;
+  font-family: sans-serif;
+}
+
+#textArea {
+  flex: 1;
+  font-size: 20px;
+  padding: 10px;
+}
+
+#topBar {
+  display: flex;
+  justify-content: center;
+  padding: 8px;
+  background: #ddd;
+}
+
+button {
+  font-size: 16px;
+  padding: 6px 12px;
+}
+
+#keyboard {
+  position: relative;
+  height: 45vh;
+  background: #ccc;
+  touch-action: none;
+}
+
+.key {
+  position: absolute;
+  background: white;
+  border-radius: 10px;
+  border: 1px solid #888;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  user-select: none;
+  touch-action: none;
+}
+</style>
+</head>
+
+<body>
+
+<textarea id="textArea" placeholder="ここに入力されます"></textarea>
+
+<div id="topBar">
+  <button id="modeBtn">編集モード</button>
+</div>
+
+<div id="keyboard"></div>
+
+<script>
+/* ===== モード ===== */
+let editMode = true;
+
+/* ===== ローマ字バッファ ===== */
+let romajiBuffer = "";
+
+/* ===== キー配置（backspace追加） ===== */
+const keys = [
+  { label:"a", x:20, y:20, w:52, h:52 },
+  { label:"i", x:80, y:20, w:52, h:52 },
+  { label:"u", x:140, y:20, w:52, h:52 },
+  { label:"e", x:200, y:20, w:52, h:52 },
+  { label:"o", x:260, y:20, w:52, h:52 },
+
+  { label:"k", x:40, y:90, w:52, h:52 },
+  { label:"s", x:100, y:90, w:52, h:52 },
+  { label:"t", x:160, y:90, w:52, h:52 },
+  { label:"n", x:220, y:90, w:52, h:52 },
+
+  { label:"back", x:300, y:90, w:70, h:52 },
+
+  { label:"space", x:60, y:160, w:200, h:52 }
+];
+
+const keyboard = document.getElementById("keyboard");
+const textArea = document.getElementById("textArea");
+const modeBtn = document.getElementById("modeBtn");
+
+/* ===== ローマ字→かな ===== */
+const kanaMap = {
+  a:"あ", i:"い", u:"う", e:"え", o:"お",
+  ka:"か", ki:"き", ku:"く", ke:"け", ko:"こ",
+  sa:"さ", shi:"し", su:"す", se:"せ", so:"そ",
+  ta:"た", chi:"ち", tsu:"つ", te:"て", to:"と",
+  na:"な", ni:"に", nu:"ぬ", ne:"ね", no:"の",
+  kya:"きゃ", kyu:"きゅ", kyo:"きょ"
+};
+
+/* ===== 入力処理 ===== */
+function handleInput(ch){
+  romajiBuffer += ch;
+
+  for(let len=3; len>=1; len--){
+    const part = romajiBuffer.slice(-len);
+    if(kanaMap[part]){
+      textArea.value += kanaMap[part];
+      romajiBuffer = "";
+      return;
+    }
+  }
+
+  if(/nn$/.test(romajiBuffer)){
+    textArea.value += "ん";
+    romajiBuffer = "";
+  }
+}
+
+/* ===== backspace ===== */
+function handleBackspace(){
+  if(romajiBuffer.length > 0){
+    romajiBuffer = romajiBuffer.slice(0, -1);
+  }else{
+    textArea.value = textArea.value.slice(0, -1);
+  }
+}
+
+/* ===== 描画 ===== */
+function render(){
+  keyboard.innerHTML = "";
+
+  keys.forEach(k=>{
+    const el = document.createElement("div");
+    el.className = "key";
+    el.textContent =
+      k.label==="space" ? "␣" :
+      k.label==="back" ? "⌫" :
+      k.label;
+
+    el.style.left = k.x+"px";
+    el.style.top = k.y+"px";
+    el.style.width = k.w+"px";
+    el.style.height = k.h+"px";
+
+    /* 入力モード */
+    el.addEventListener("click", ()=>{
+      if(editMode) return;
+
+      if(k.label==="space"){
+        textArea.value += " ";
+      }else if(k.label==="back"){
+        handleBackspace();
+      }else{
+        handleInput(k.label);
+      }
+    });
+
+    /* 編集モード：移動＆サイズ */
+    let sx, sy, startDist;
+
+    el.addEventListener("touchstart", e=>{
+      if(!editMode) return;
+
+      if(e.touches.length===1){
+        sx=e.touches[0].clientX;
+        sy=e.touches[0].clientY;
+      }
+
+      if(e.touches.length===2){
+        const dx=e.touches[0].clientX-e.touches[1].clientX;
+        const dy=e.touches[0].clientY-e.touches[1].clientY;
+        startDist=Math.hypot(dx,dy);
+      }
+    });
+
+    el.addEventListener("touchmove", e=>{
+      if(!editMode) return;
+      e.preventDefault();
+
+      if(e.touches.length===1){
+        const nx=e.touches[0].clientX;
+        const ny=e.touches[0].clientY;
+        k.x+=nx-sx;
+        k.y+=ny-sy;
+        sx=nx; sy=ny;
+        render();
+      }
+
+      if(e.touches.length===2 && startDist){
+        const dx=e.touches[0].clientX-e.touches[1].clientX;
+        const dy=e.touches[0].clientY-e.touches[1].clientY;
+        const dist=Math.hypot(dx,dy);
+        const scale=dist/startDist;
+        k.w=Math.max(30,Math.min(120,k.w*scale));
+        k.h=Math.max(30,Math.min(120,k.h*scale));
+        startDist=dist;
+        render();
+      }
+    });
+
+    keyboard.appendChild(el);
+  });
+}
+
+/* ===== モード切替 ===== */
+modeBtn.onclick=()=>{
+  editMode=!editMode;
+  modeBtn.textContent=editMode?"編集モード":"入力モード";
+};
+
+/* 初期描画 */
+render();
+</script>
+
+</body>
+</html>
