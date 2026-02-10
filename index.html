@@ -72,22 +72,43 @@ let editMode = true;
 /* ===== ローマ字バッファ ===== */
 let romajiBuffer = "";
 
+/* ===== 記号用 ===== */
+const symbolList = ["、", "。", "ー", "！", "？"];
+let symbolIndex = 0;
+
+let symbolTimer = null;
+const SYMBOL_RESET_TIME = 500;
+let symbolActive = false;
+
+
+
 /* ===== キー配置（backspace追加） ===== */
 const keys = [
-  { label:"a", x:20, y:20, w:52, h:52 },
-  { label:"i", x:80, y:20, w:52, h:52 },
-  { label:"u", x:140, y:20, w:52, h:52 },
-  { label:"e", x:200, y:20, w:52, h:52 },
-  { label:"o", x:260, y:20, w:52, h:52 },
+   { label:"a", x:10, y:20, w:52, h:52 },
+  { label:"i", x:70, y:20, w:52, h:52 },
+  { label:"u", x:130, y:20, w:52, h:52 },
+  { label:"e", x:190, y:20, w:52, h:52 },
+  { label:"o", x:250, y:20, w:52, h:52 },
+  { label:"k", x:310, y:20, w:52, h:52 },
+  { label:"s", x:370, y:20, w:52, h:52 },
 
-  { label:"k", x:40, y:90, w:52, h:52 },
-  { label:"s", x:100, y:90, w:52, h:52 },
-  { label:"t", x:160, y:90, w:52, h:52 },
-  { label:"n", x:220, y:90, w:52, h:52 },
+  { label:"t", x:10, y:90, w:52, h:52 },
+  { label:"n", x:70, y:90, w:52, h:52 },
+  { label:"h", x:130, y:90, w:52, h:52 },
+  { label:"m", x:190, y:90, w:52, h:52 },
+  { label:"y", x:250, y:90, w:52, h:52 },
+  { label:"r", x:310, y:90, w:52, h:52 },
+  { label:"w", x:370, y:90, w:52, h:52 },
+  { label:"g", x:430, y:90, w:52, h:52 },
 
-  { label:"back", x:300, y:90, w:70, h:52 },
+  { label:"z", x:40, y:160, w:52, h:52 },
+  { label:"d", x:100, y:160, w:52, h:52 },
+  { label:"b", x:290, y:160, w:52, h:52 },
+  { label:"p", x:350, y:160, w:52, h:52 },
 
-  { label:"space", x:60, y:160, w:200, h:52 }
+  { label:"symbol", x:410, y:160, w:70, h:52 },
+  { label:"back", x:430, y:20, w:70, h:52 },
+  { label:"space", x:160, y:160, w:120, h:52 }
 ];
 
 const keyboard = document.getElementById("keyboard");
@@ -98,10 +119,31 @@ const modeBtn = document.getElementById("modeBtn");
 const kanaMap = {
   a:"あ", i:"い", u:"う", e:"え", o:"お",
   ka:"か", ki:"き", ku:"く", ke:"け", ko:"こ",
-  sa:"さ", shi:"し", su:"す", se:"せ", so:"そ",
-  ta:"た", chi:"ち", tsu:"つ", te:"て", to:"と",
+  sa:"さ", si:"し", shi:"し", su:"す", se:"せ", so:"そ",
+  ta:"た", ti:"ち", tu:"つ", tsu:"つ", te:"て", to:"と",
   na:"な", ni:"に", nu:"ぬ", ne:"ね", no:"の",
-  kya:"きゃ", kyu:"きゅ", kyo:"きょ"
+  ha:"は", hi:"ひ", hu:"ふ", he:"へ", ho:"ほ",
+  ma:"ま", mi:"み", mu:"む", me:"め", mo:"も",
+  ya:"や", yu:"ゆ", yo:"よ", 
+  ra:"ら", ri:"り", ru:"る", re:"れ", ro:"ろ",
+  wa:"わ", wo:"を", nn:"ん",
+  ga:"が", gi:"ぎ", gu:"ぐ", ge:"げ", go:"ご",
+  za:"ざ", zi:"じ", zu:"ず", ze:"ぜ", zo:"ぞ",
+  da:"だ", di:"ぢ", du:"づ", de:"で", do:"ど",
+  ba:"ば", bi:"び", bu:"ぶ", be:"べ", bo:"ぼ",
+  pa:"は", pi:"ひ", pu:"ふ", pe:"へ", po:"ほ",
+  kya:"きゃ", kyu:"きゅ", kyo:"きょ",
+  sya:"しゃ", syu:"しゅ", syo:"しょ",
+  tya:"ちゃ", tyu:"ちゅ", tyo:"ちょ",
+  nya:"にゃ", nyu:"にゅ", nyo:"にょ",
+  hya:"ひゃ", hyu:"ひゅ", hyo:"ひょ",
+  mya:"みゃ", myu:"みゅ", myo:"みょ",
+  rya:"りゃ", ryu:"りゅ", ryo:"りょ",
+  gya:"ぎゃ", gyu:"ぎゅ", gyo:"ぎょ",
+  zya:"じゃ", zyu:"じゅ", zyo:"じょ",
+  dya:"ぢゃ", dyu:"ぢゅ", dyo:"ぢょ",
+  bya:"びゃ", byu:"びゅ", byo:"びょ",
+  pya:"きゃ", pyu:"きゅ", pyo:"きょ",
 };
 
 /* ===== 入力処理 ===== */
@@ -122,6 +164,34 @@ function handleInput(ch){
     romajiBuffer = "";
   }
 }
+
+/* ===== 記号入力 ===== */
+function handleSymbol(){
+  // タイマーをリセット
+  if(symbolTimer){
+    clearTimeout(symbolTimer);
+  }
+
+  // すでに記号入力中なら「直前の1文字」を削除
+  if(symbolActive){
+    textArea.value = textArea.value.slice(0, -1);
+  }
+
+  // 今回の記号を入れる
+  textArea.value += symbolList[symbolIndex];
+
+  symbolIndex = (symbolIndex + 1) % symbolList.length;
+  symbolActive = true;
+
+  // 一定時間後に確定（リセット）
+  symbolTimer = setTimeout(()=>{
+    symbolIndex = 0;
+    symbolActive = false;
+    symbolTimer = null;
+  }, SYMBOL_RESET_TIME);
+}
+
+
 
 /* ===== backspace ===== */
 function handleBackspace(){
@@ -157,6 +227,8 @@ function render(){
         textArea.value += " ";
       }else if(k.label==="back"){
         handleBackspace();
+      } else if(k.label==="symbol"){
+        handleSymbol();
       }else{
         handleInput(k.label);
       }
@@ -217,7 +289,3 @@ modeBtn.onclick=()=>{
 
 /* 初期描画 */
 render();
-</script>
-
-</body>
-</html>
